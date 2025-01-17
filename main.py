@@ -1,3 +1,4 @@
+import concurrent.futures
 import os.path
 
 import pyglet
@@ -13,10 +14,22 @@ columns = 5
 bombs = 5
 bomb_lists = []
 training_size = 100
+num_threads = 16
 for i in range(training_size):
     bomb_list = Game.get_random_bomb_list(rows, columns, bombs)
     bomb_lists.append(bomb_list)
 
+def run_sims(ge):
+    while len(ge) > 0:
+        for g in ge:
+            if len(g) > 0:
+                for game in g:
+                    if game.game_over:
+                        g.remove(game)
+                    else:
+                        game.activate_net()
+            else:
+                ge.remove(g)
 
 def eval_genomes(genomes, config):
     ge = []
@@ -35,16 +48,26 @@ def eval_genomes(genomes, config):
             training_games.append(game)
         ge.append(training_games)
 
-    while len(ge) > 0:
-        for g in ge:
-            if len(g) > 0:
-                for game in g:
-                    if game.game_over:
-                        g.remove(game)
-                    else:
-                        game.activate_net()
-            else:
-                ge.remove(g)
+    # while len(ge) > 0:
+    #     for g in ge:
+    #         if len(g) > 0:
+    #             for game in g:
+    #                 if game.game_over:
+    #                     g.remove(game)
+    #                 else:
+    #                     game.activate_net()
+    #         else:
+    #             ge.remove(g)
+
+    pool = concurrent.futures.ThreadPoolExecutor()
+    for t_id in range(num_threads):
+        divided_len = int(len(genomes) / num_threads)
+        divided_ge = ge[t_id * divided_len:t_id * divided_len + divided_len]
+        pool.submit(run_sims, divided_ge)
+
+    pool.shutdown(wait=True)
+
+
 
 
 def run(config_path):
@@ -56,15 +79,15 @@ def run(config_path):
         config_path
     )
 
-    # pop = neat.Population(config)
-    pop = neat.Checkpointer.restore_checkpoint('neat-checkpoint-551')
+    pop = neat.Population(config)
+    # pop = neat.Checkpointer.restore_checkpoint('neat-checkpoint-720')
 
     pop.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     pop.add_reporter(stats)
     pop.add_reporter(neat.Checkpointer(10))
 
-    winner = pop.run(eval_genomes, 50000)
+    winner = pop.run(eval_genomes, 5000)
 
     visualize.draw_net(config, winner, True)
     visualize.plot_stats(stats, ylog=False, view=False)
@@ -73,8 +96,7 @@ def run(config_path):
     net = neat.nn.FeedForwardNetwork.create(winner, config)
     print(f"Best fitness: {winner.fitness}")
 
-    bomb_list = Game.get_random_bomb_list(rows, columns, bombs)
-    window = GameWindow(rows, columns, 0, net, size, bomb_list, lambda a, b: None)
+    window = GameWindow(rows, columns, 0, net, size, bomb_lists[0], lambda a, b: None)
     pyglet.app.run()
 
 

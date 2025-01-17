@@ -145,7 +145,6 @@ class Game:
                     count += 1
 
         if count == self.columns * self.rows - len(self.bomb_list):
-            print("winner winner")
             self.game_over = True
             self.fitness += win_bonus
             self.on_game_over(self.fitness, self.index)
